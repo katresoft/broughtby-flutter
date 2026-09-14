@@ -1,3 +1,7 @@
+## 0.1.1
+
+- Moved the repository to https://github.com/katresoft/broughtby-flutter.
+
 ## 0.1.0
 
 Initial release.
