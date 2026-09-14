@@ -1,0 +1,23 @@
+name: broughtby_flutter
+description: Broughtby referral tracking SDK for Flutter apps.
+version: 0.1.0
+repository: https://github.com/hkndzdr/broughtby-flutter
+homepage: https://github.com/hkndzdr/broughtby-flutter
+issue_tracker: https://github.com/hkndzdr/broughtby-flutter/issues
+environment:
+  sdk: ">=3.5.0 <4.0.0"
+  flutter: ">=3.24.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  http: ^1.2.2
+  app_links: ^6.3.2
+  play_install_referrer: ^0.5.0
+  shared_preferences: ^2.3.3
+  webview_flutter: ^4.10.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^5.0.0
