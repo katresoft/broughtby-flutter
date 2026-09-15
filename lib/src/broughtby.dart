@@ -6,6 +6,7 @@ import 'api_client.dart';
 import 'models.dart';
 import 'referral_code.dart';
 import 'dashboard_page.dart';
+import 'dashboard_url.dart';
 import 'sources.dart';
 
 /// Broughtby SDK.
@@ -184,14 +185,34 @@ class BroughtBy {
   /// The dashboard is rendered on the server, so screens are written once
   /// and behave the same on every platform, and a design change never
   /// requires an app update.
-  static Future<BroughtByResult<void>> openDashboard(BuildContext context) async {
+  ///
+  /// [title] is shown in the app bar. Pass your own already-translated
+  /// string; the SDK ships no copy of its own.
+  ///
+  /// [locale] decides the language of the dashboard. It defaults to the
+  /// locale your app is currently running in, which is not always the
+  /// device language: someone with a Turkish phone may be using your app in
+  /// English, and this screen opens inside your app.
+  static Future<BroughtByResult<void>> openDashboard(
+    BuildContext context, {
+    String? title,
+    String? locale,
+  }) async {
+    final String? language =
+        locale ?? Localizations.maybeLocaleOf(context)?.languageCode;
+
     final BroughtByResult<Uri> url = await _required._client.fetchDashboardUrl();
 
     switch (url) {
       case BroughtByOk<Uri>(:final Uri value):
         if (!context.mounted) return const BroughtByOk<void>(null);
         await Navigator.of(context).push(
-          MaterialPageRoute<void>(builder: (_) => BroughtByDashboardPage(url: value)),
+          MaterialPageRoute<void>(
+            builder: (_) => BroughtByDashboardPage(
+              url: dashboardUrlWithLanguage(value, language),
+              title: title,
+            ),
+          ),
         );
         return const BroughtByOk<void>(null);
 

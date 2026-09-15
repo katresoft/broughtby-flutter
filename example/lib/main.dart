@@ -70,7 +70,8 @@ class _HomePageState extends State<HomePage> {
             ),
             const SizedBox(height: 12),
             ElevatedButton(
-              onPressed: () => BroughtBy.openDashboard(context),
+              // The title is the app's own string; the SDK ships no copy.
+              onPressed: () => BroughtBy.openDashboard(context, title: 'My earnings'),
               child: const Text('Open my earnings screen'),
             ),
             if (_code != null) Text('Your code: $_code'),

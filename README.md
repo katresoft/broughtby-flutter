@@ -58,6 +58,25 @@ final info = (await BroughtBy.getAffiliate()).valueOrNull;
 // info.shareUrl  → 'https://go.broughtby.io/r/vakitnakit/AHMET34'
 ```
 
+### The earnings screen
+
+```dart
+await BroughtBy.openDashboard(context, title: 'Invite friends');
+```
+
+The screen is rendered on the server and opens in a webview inside your app,
+so its design changes without an app release. It speaks Turkish, English,
+German, Spanish and French.
+
+`title` is yours to translate — the SDK ships no copy of its own, and the app
+bar shows no title unless you pass one. The language follows the locale your
+app is running in, which is not always the device language: someone with a
+Turkish phone may be using your app in English. Override it when you need to:
+
+```dart
+await BroughtBy.openDashboard(context, locale: 'de');
+```
+
 ## Platform setup
 
 ### Android
@@ -164,6 +183,25 @@ switch (result) {
 final info = (await BroughtBy.getAffiliate()).valueOrNull;
 // info.code      → 'AHMET34'
 // info.shareUrl  → 'https://go.broughtby.io/r/vakitnakit/AHMET34'
+```
+
+#### Kazanç ekranı
+
+```dart
+await BroughtBy.openDashboard(context, title: 'Arkadaşını davet et');
+```
+
+Ekran sunucuda çiziliyor ve uygulamanın içinde bir webview'da açılıyor; bu
+yüzden tasarımı yeni sürüm gerektirmeden değişiyor. Türkçe, İngilizce,
+Almanca, İspanyolca ve Fransızca biliyor.
+
+`title` size ait — SDK kendi metnini taşımıyor ve siz vermezseniz başlık
+çubuğu boş kalır. Dil, uygulamanızın o an çalıştığı dili izliyor; bu her
+zaman cihaz dili değil: telefonu Türkçe olan biri uygulamanızı İngilizce
+kullanıyor olabilir. Gerektiğinde açıkça verebilirsiniz:
+
+```dart
+await BroughtBy.openDashboard(context, locale: 'de');
 ```
 
 ### Platform kurulumu

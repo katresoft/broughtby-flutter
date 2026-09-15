@@ -46,7 +46,7 @@ class _BroughtByDashboardPageState extends State<BroughtByDashboardPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: Text(widget.title ?? '')),
+      appBar: AppBar(title: widget.title == null ? null : Text(widget.title!)),
       body: Stack(
         children: <Widget>[
           WebViewWidget(controller: _controller),
