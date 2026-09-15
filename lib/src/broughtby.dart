@@ -198,8 +198,7 @@ class BroughtBy {
     String? title,
     String? locale,
   }) async {
-    final String? language =
-        locale ?? Localizations.maybeLocaleOf(context)?.languageCode;
+    final String? language = dashboardLanguage(context, locale);
 
     final BroughtByResult<Uri> url = await _required._client.fetchDashboardUrl();
 
