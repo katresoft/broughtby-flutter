@@ -8,7 +8,7 @@ Referral tracking SDK for mobile apps.
 
 ```yaml
 dependencies:
-  broughtby_flutter: ^0.1.0
+  broughtby_flutter: ^0.2.0
 ```
 
 ## Usage
@@ -55,7 +55,7 @@ switch (result) {
 ```dart
 final info = (await BroughtBy.getAffiliate()).valueOrNull;
 // info.code      → 'AHMET34'
-// info.shareUrl  → 'https://go.broughtby.io/r/vakitnakit/AHMET34'
+// info.shareUrl  → 'https://broughtby.vercel.app/r/vakitnakit/AHMET34'
 ```
 
 ### The earnings screen
@@ -94,8 +94,9 @@ automatically when a user installs from the App Store. Two channels remain:
    clipboard" notice.
 2. **Manual entry** — `submitCode`. This is the real, reliable path.
 
-If you use Universal Links, add `applinks:go.broughtby.io` to
-`Associated Domains`. This only works while the app is **already installed**.
+If you use Universal Links, add `applinks:broughtby.vercel.app` to
+`Associated Domains` (this will move to `go.broughtby.io` once that domain
+is registered). This only works while the app is **already installed**.
 
 ## Design notes
 
@@ -135,7 +136,7 @@ Mobil uygulamalar için referral takip SDK'si.
 
 ```yaml
 dependencies:
-  broughtby_flutter: ^0.1.0
+  broughtby_flutter: ^0.2.0
 ```
 
 ### Kullanım
@@ -182,7 +183,7 @@ switch (result) {
 ```dart
 final info = (await BroughtBy.getAffiliate()).valueOrNull;
 // info.code      → 'AHMET34'
-// info.shareUrl  → 'https://go.broughtby.io/r/vakitnakit/AHMET34'
+// info.shareUrl  → 'https://broughtby.vercel.app/r/vakitnakit/AHMET34'
 ```
 
 #### Kazanç ekranı
@@ -217,7 +218,7 @@ iOS'ta deferred deep link mekanizması **yoktur**. Kullanıcı App Store'dan kur
 1. **Pano** — landing sayfası kodu panoya yazar, SDK ilk açılışta okur. iOS kullanıcıya "yapıştırdı" bildirimi gösterir.
 2. **Elle giriş** — `submitCode`. Asıl güvenilir yol budur.
 
-Universal Link kullanacaksanız `Associated Domains` içine `applinks:go.broughtby.io` ekleyin. Bu yalnızca uygulama **zaten yüklüyken** çalışır.
+Universal Link kullanacaksanız `Associated Domains` içine `applinks:broughtby.vercel.app` ekleyin (`broughtby.io` alan adı alınınca `go.broughtby.io` olacak). Bu yalnızca uygulama **zaten yüklüyken** çalışır.
 
 ### Tasarım notları
 

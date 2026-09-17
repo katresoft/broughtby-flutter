@@ -50,6 +50,11 @@ class BroughtBy {
   ///
   /// [baseUrl] is only needed for tenants running their own server or
   /// pointing at a staging environment.
+  ///
+  /// The defaults below point at the temporary `broughtby.vercel.app`
+  /// deployment. They will move to `api.broughtby.io` / `go.broughtby.io`
+  /// once that domain is registered — a breaking change tracked for the
+  /// next major version, not a silent swap.
   static Future<void> initialize({
     required String publicKey,
     Uri? baseUrl,
@@ -57,7 +62,7 @@ class BroughtBy {
     http.Client? httpClient,
     List<ReferralCodeSource>? sources,
   }) async {
-    final Uri api = baseUrl ?? Uri.parse('https://api.broughtby.io');
+    final Uri api = baseUrl ?? Uri.parse('https://broughtby.vercel.app');
 
     _instance = BroughtBy._(
       client: BroughtByApiClient(
@@ -73,7 +78,7 @@ class BroughtBy {
             const InstallReferrerSource(),
             const ClipboardSource(),
           ],
-      shareUrlBase: shareUrlBase ?? Uri.parse('https://go.broughtby.io'),
+      shareUrlBase: shareUrlBase ?? Uri.parse('https://broughtby.vercel.app'),
     );
   }
 

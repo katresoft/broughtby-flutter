@@ -1,3 +1,11 @@
+## 0.2.1
+
+- Fixed the default `baseUrl` and `shareUrlBase`: they pointed at
+  `api.broughtby.io` / `go.broughtby.io`, domains that are not registered
+  yet, so every call failed unless you passed both explicitly. They now
+  default to the live `broughtby.vercel.app` deployment and will move to
+  the `broughtby.io` subdomains once that domain is registered.
+
 ## 0.2.0
 
 - `openDashboard` now takes `title` and `locale`. The language follows the
