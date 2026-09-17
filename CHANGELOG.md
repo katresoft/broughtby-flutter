@@ -1,3 +1,11 @@
+## 0.2.2
+
+- Widened the `app_links` constraint from `^6.3.2` to `>=6.3.2 <8.0.0`.
+  It pinned below app_links 7.x, which conflicted with any app that
+  already resolves app_links 7 through another dependency. Only
+  `getInitialLink()` is used, and that call is unchanged across 6.x
+  and 7.x, so both majors work.
+
 ## 0.2.1
 
 - Fixed the default `baseUrl` and `shareUrlBase`: they pointed at
