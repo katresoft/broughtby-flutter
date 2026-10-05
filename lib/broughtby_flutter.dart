@@ -2,7 +2,10 @@
 ///
 /// ```dart
 /// await BroughtBy.initialize(publicKey: 'bt_pk_...');
-/// await BroughtBy.identify(jwt: supabaseAccessToken);
+/// await BroughtBy.identify(
+///   jwt: supabaseAccessToken,
+///   revenueCatUserId: await Purchases.appUserID,
+/// );
 /// await BroughtBy.captureAttribution();
 /// ```
 library;
@@ -28,5 +31,6 @@ export 'src/referral_code.dart'
         extractCodeFromLink,
         looksLikeReferralCode,
         normalizeReferralCode;
+export 'src/setup_report.dart' show AppInfo, AppInfoSource, PlatformAppInfoSource;
 export 'src/sources.dart'
     show ClipboardSource, DeepLinkSource, InstallReferrerSource, ReferralCodeSource;

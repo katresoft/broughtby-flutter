@@ -100,6 +100,19 @@ enum BroughtByErrorKind {
 
   /// An attempt to apply a user's own code to themselves.
   selfReferral,
+
+  /// The user has been using the app for longer than the app's new-user
+  /// window; referrals only count for new users.
+  windowExpired,
+
+  /// The requested custom code is already in use.
+  codeTaken,
+
+  /// The requested custom code isn't allowed (wrong shape, or reserved).
+  invalidCode,
+
+  /// The code was already customized once; it can't be changed again.
+  alreadyCustomized,
 }
 
 class BroughtByError implements Exception {

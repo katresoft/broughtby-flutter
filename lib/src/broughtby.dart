@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
@@ -7,6 +9,7 @@ import 'models.dart';
 import 'referral_code.dart';
 import 'dashboard_page.dart';
 import 'dashboard_url.dart';
+import 'setup_report.dart';
 import 'sources.dart';
 
 /// Broughtby SDK.
@@ -14,9 +17,17 @@ import 'sources.dart';
 /// Integration is three calls:
 /// ```dart
 /// await BroughtBy.initialize(publicKey: 'bt_pk_...');
-/// await BroughtBy.identify(jwt: supabaseAccessToken);
+/// await BroughtBy.identify(
+///   jwt: supabaseAccessToken,
+///   revenueCatUserId: await Purchases.appUserID,
+/// );
 /// await BroughtBy.captureAttribution();
 /// ```
+///
+/// There is very little to configure by hand on the other side. The first
+/// time the app runs, the SDK reports what the app already knows about
+/// itself — its bundle ID or package name, its signing fingerprint, which
+/// service issued the session token — and the console fills itself in.
 ///
 /// `appId` is not requested: the public key already maps to one app on the
 /// server. Accepting both would open the door to silent bugs if they ever
@@ -29,15 +40,22 @@ class BroughtBy {
   BroughtBy._({
     required BroughtByApiClient client,
     required List<ReferralCodeSource> sources,
+    required AppInfoSource appInfo,
     required this.shareUrlBase,
   })  : _client = client,
-        _sources = sources;
+        _sources = sources,
+        _appInfo = appInfo;
 
   static BroughtBy? _instance;
 
   final BroughtByApiClient _client;
   final List<ReferralCodeSource> _sources;
+  final AppInfoSource _appInfo;
   final Uri shareUrlBase;
+
+  /// Work started by `initialize` and `identify` that the caller doesn't
+  /// wait for. Kept so tests can.
+  final List<Future<void>> _background = <Future<void>>[];
 
   /// Marks that attribution has already been recorded successfully on this
   /// device.
@@ -45,6 +63,21 @@ class BroughtBy {
   /// The server still has the final say; this flag only avoids an
   /// unnecessary clipboard read and network call on every launch.
   static const String _attributedKey = 'broughtby.attributed';
+
+  /// Marks that the clipboard has been looked at once on this device.
+  static const String _clipboardCheckedKey = 'broughtby.clipboard_checked';
+
+  /// Marks that the server has everything the app can tell it, so setup
+  /// reports stop. Suffixed with the tail of the public key: pointing the
+  /// same build at a different app has to start over.
+  String get _setupCompleteKey {
+    final String key = _client.publicKey;
+    return 'broughtby.setup_complete.${key.length <= 8 ? key : key.substring(key.length - 8)}';
+  }
+
+  /// The user / RevenueCat ID pair last reported, so it's sent once rather
+  /// than on every launch.
+  static const String _revenueCatLinkKey = 'broughtby.revenuecat_link';
 
   /// Sets up the SDK.
   ///
@@ -61,6 +94,7 @@ class BroughtBy {
     Uri? shareUrlBase,
     http.Client? httpClient,
     List<ReferralCodeSource>? sources,
+    AppInfoSource? appInfo,
   }) async {
     final Uri api = baseUrl ?? Uri.parse('https://broughtby.vercel.app');
 
@@ -78,8 +112,13 @@ class BroughtBy {
             const InstallReferrerSource(),
             const ClipboardSource(),
           ],
+      appInfo: appInfo ?? const PlatformAppInfoSource(),
       shareUrlBase: shareUrlBase ?? Uri.parse('https://broughtby.vercel.app'),
     );
+
+    // Not awaited: telling the console about the app is a convenience for
+    // the developer, and must never hold up the app's launch.
+    _instance!._inBackground(_instance!._reportSetup());
   }
 
   static BroughtBy get _required {
@@ -98,9 +137,35 @@ class BroughtBy {
   /// The token comes from the tenant's own identity provider (e.g. a
   /// Supabase session token) and is verified on the server. Call
   /// `identify(jwt: null)` when the user signs out.
-  static Future<void> identify({required String? jwt}) async {
-    _required._client.setUserToken(jwt);
+  ///
+  /// Pass [revenueCatUserId] — `await Purchases.appUserID` — whenever you
+  /// have it. Purchases reach Broughtby under that ID; without it, they only
+  /// match this user if you log RevenueCat in with exactly the same ID as
+  /// the token's `sub`. A purchase that matches no user earns nobody
+  /// anything, and nothing reports it as an error.
+  static Future<void> identify({required String? jwt, String? revenueCatUserId}) async {
+    final BroughtBy self = _required;
+    self._client.setUserToken(jwt);
+
+    if (jwt == null || jwt.isEmpty) return;
+    final TokenInfo? token = readTokenInfo(jwt);
+
+    // Neither is awaited; see `initialize`.
+    self._inBackground(self._reportSetup(token: token));
+    if (revenueCatUserId != null && revenueCatUserId.isNotEmpty) {
+      self._inBackground(self._linkRevenueCatUser(revenueCatUserId, token?.subject));
+    }
   }
+
+  /// Replaces the user's generated code with one they chose, e.g. their
+  /// name. Allowed once; check [AffiliateInfo.canCustomize] first.
+  static Future<BroughtByResult<AffiliateInfo>> customizeCode(String input) {
+    return _required._client.customizeCode(normalizeReferralCode(input));
+  }
+
+  /// Completes once the background work started so far has finished.
+  @visibleForTesting
+  static Future<void> get settled => Future.wait(_required._background.toList());
 
   /// Looks for a code across every channel and reports it to the server if
   /// found.
@@ -120,6 +185,17 @@ class BroughtBy {
     }
 
     for (final ReferralCodeSource source in self._sources) {
+      // The clipboard is read once per install, on the first launch — the
+      // moment it can plausibly hold an invite code. Reading it on every
+      // launch would show the system's paste prompt each time, and would
+      // keep sending whatever short text the user last copied to the server
+      // for as long as they stay unattributed, which for an organic user is
+      // forever.
+      if (source is ClipboardSource) {
+        if (await self._flag(_clipboardCheckedKey)) continue;
+        await self._setFlag(_clipboardCheckedKey);
+      }
+
       final String? code = await source.read();
       if (code == null) continue;
 
@@ -244,22 +320,62 @@ class BroughtBy {
     };
   }
 
-  Future<bool> _alreadyAttributedLocally() async {
+  Future<bool> _alreadyAttributedLocally() => _flag(_attributedKey);
+
+  Future<void> _markAttributedLocally() => _setFlag(_attributedKey);
+
+  Future<bool> _flag(String key) async {
     try {
       final SharedPreferences prefs = await SharedPreferences.getInstance();
-      return prefs.getBool(_attributedKey) ?? false;
+      return prefs.getBool(key) ?? false;
     } catch (_) {
-      // No local storage available; retrying on every launch is harmless.
+      // No local storage available; the work is simply repeated.
       return false;
     }
   }
 
-  Future<void> _markAttributedLocally() async {
+  Future<void> _setFlag(String key) async {
     try {
       final SharedPreferences prefs = await SharedPreferences.getInstance();
-      await prefs.setBool(_attributedKey, true);
+      await prefs.setBool(key, true);
     } catch (_) {
       // If it can't be marked, it's simply retried on the next launch.
+    }
+  }
+
+  void _inBackground(Future<void> work) {
+    // Background work never surfaces an error: none of it is the app's
+    // business, and an unhandled async error would be. Finished work is
+    // dropped so a long-lived app refreshing its token doesn't accumulate it.
+    late final Future<void> tracked;
+    tracked = work.catchError((Object _) {}).whenComplete(() => _background.remove(tracked));
+    _background.add(tracked);
+  }
+
+  /// Reports what the app knows about itself, until the server says it has
+  /// everything.
+  Future<void> _reportSetup({TokenInfo? token}) async {
+    if (await _flag(_setupCompleteKey)) return;
+
+    final AppInfo? app = await _appInfo.read();
+    if (app == null) return;
+
+    final bool? complete = await _client.reportSetup(app, token: token);
+    if (complete == true) await _setFlag(_setupCompleteKey);
+  }
+
+  /// Reports the RevenueCat ID once per user / ID pair.
+  Future<void> _linkRevenueCatUser(String revenueCatUserId, String? subject) async {
+    final String pair = '${subject ?? ''}|$revenueCatUserId';
+
+    try {
+      final SharedPreferences prefs = await SharedPreferences.getInstance();
+      if (prefs.getString(_revenueCatLinkKey) == pair) return;
+
+      final BroughtByResult<void> result = await _client.linkRevenueCatUser(revenueCatUserId);
+      if (result.isOk) await prefs.setString(_revenueCatLinkKey, pair);
+    } catch (_) {
+      // Retried on the next identify.
     }
   }
 }

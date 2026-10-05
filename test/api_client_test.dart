@@ -187,4 +187,51 @@ void main() {
       expect(info?.canCustomize, isTrue);
     });
   });
+
+  group('custom code', () {
+    test('sends the requested code and returns the updated record', () async {
+      final BroughtByApiClient client = clientReturning(200, <String, dynamic>{
+        'code': 'AHMET34',
+        'shareUrl': 'https://go.example.com/r/app/AHMET34',
+        'isCustom': true,
+        'canCustomize': false,
+      });
+
+      final BroughtByResult<AffiliateInfo> result = await client.customizeCode('AHMET34');
+
+      expect(sent.single.url.path, '/api/v1/affiliate/code');
+      expect(jsonDecode(sent.single.body), <String, dynamic>{'code': 'AHMET34'});
+      expect(result.valueOrNull?.code, 'AHMET34');
+      expect(result.valueOrNull?.canCustomize, isFalse);
+    });
+
+    test('maps each rejection to its own error kind', () async {
+      final Map<String, BroughtByErrorKind> expected = <String, BroughtByErrorKind>{
+        'code_taken': BroughtByErrorKind.codeTaken,
+        'invalid_code': BroughtByErrorKind.invalidCode,
+        'already_customized': BroughtByErrorKind.alreadyCustomized,
+      };
+
+      for (final MapEntry<String, BroughtByErrorKind> entry in expected.entries) {
+        final BroughtByApiClient client =
+            clientReturning(409, <String, dynamic>{'error': entry.key});
+        final BroughtByResult<AffiliateInfo> result = await client.customizeCode('X');
+        expect(result.errorOrNull?.kind, entry.value, reason: entry.key);
+      }
+    });
+  });
+
+  group('new-user window', () {
+    test('an expired window has its own error kind', () async {
+      final BroughtByApiClient client =
+          clientReturning(409, <String, dynamic>{'error': 'window_expired'});
+
+      final BroughtByResult<AttributionStatus> result = await client.recordAttribution(
+        code: 'AHMET34',
+        source: AttributionSource.manualCode,
+      );
+
+      expect(result.errorOrNull?.kind, BroughtByErrorKind.windowExpired);
+    });
+  });
 }

@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 
 import 'models.dart';
+import 'setup_report.dart';
 
 /// The Broughtby API client.
 ///
@@ -93,6 +94,68 @@ class BroughtByApiClient {
     );
   }
 
+  /// Replaces the user's generated code with one they chose.
+  ///
+  /// Allowed once. The old code stops working, so links already shared
+  /// with it break — which is why the server doesn't allow a second change.
+  Future<BroughtByResult<AffiliateInfo>> customizeCode(String code) async {
+    if (!hasUserToken) {
+      return const BroughtByFailure<AffiliateInfo>(
+        BroughtByError(BroughtByErrorKind.notIdentified),
+      );
+    }
+
+    return _send<AffiliateInfo>(
+      path: 'api/v1/affiliate/code',
+      body: <String, dynamic>{'code': code},
+      decode: AffiliateInfo.fromJson,
+    );
+  }
+
+  /// Tells the server which RevenueCat user this signed-in user is.
+  ///
+  /// Purchases reach Broughtby under RevenueCat's user ID. Unless the app
+  /// logs RevenueCat in with the very same ID as the session token's `sub`,
+  /// the two don't match — and a purchase that matches no user produces no
+  /// commission and no error. Reporting the ID removes that requirement.
+  Future<BroughtByResult<void>> linkRevenueCatUser(String revenueCatUserId) async {
+    if (!hasUserToken) {
+      return const BroughtByFailure<void>(
+        BroughtByError(BroughtByErrorKind.notIdentified),
+      );
+    }
+
+    return _send<void>(
+      path: 'api/v1/identity',
+      body: <String, dynamic>{'revenueCatUserId': revenueCatUserId},
+      decode: (_) {},
+    );
+  }
+
+  /// Reports what the running app knows about itself.
+  ///
+  /// Returns whether the server has everything it needs for this platform,
+  /// or null if the report didn't get through. Carries the public key only
+  /// — it has to work before sign-in is configured, because helping the
+  /// developer configure sign-in is half the point.
+  Future<bool?> reportSetup(AppInfo app, {TokenInfo? token}) async {
+    final BroughtByResult<bool> result = await _send<bool>(
+      path: 'api/v1/setup',
+      withUser: false,
+      body: <String, dynamic>{
+        'platform': app.platform,
+        'appIdentifier': app.appIdentifier,
+        if (app.signingFingerprint != null) 'signingFingerprint': app.signingFingerprint,
+        if (app.countryCode != null) 'countryCode': app.countryCode,
+        if (token?.issuer != null) 'tokenIssuer': token!.issuer,
+        if (token?.algorithm != null) 'tokenAlgorithm': token!.algorithm,
+      },
+      decode: (Map<String, dynamic> json) => json['complete'] == true,
+    );
+
+    return result.valueOrNull;
+  }
+
   /// Fetches the affiliate record, creating one if it doesn't exist yet.
   Future<BroughtByResult<AffiliateInfo>> fetchAffiliate() async {
     if (!hasUserToken) {
@@ -112,13 +175,14 @@ class BroughtByApiClient {
     required String path,
     required Map<String, dynamic> body,
     required T Function(Map<String, dynamic>) decode,
+    bool withUser = true,
   }) async {
     http.Response response;
     try {
       response = await _http
           .post(
             baseUrl.resolve(path),
-            headers: _headers(withUser: true),
+            headers: _headers(withUser: withUser),
             body: jsonEncode(body),
           )
           .timeout(timeout);
@@ -157,6 +221,10 @@ class BroughtByApiClient {
       'unknown_code' => BroughtByErrorKind.unknownCode,
       'already_claimed' => BroughtByErrorKind.alreadyClaimed,
       'self_referral' => BroughtByErrorKind.selfReferral,
+      'window_expired' => BroughtByErrorKind.windowExpired,
+      'code_taken' => BroughtByErrorKind.codeTaken,
+      'invalid_code' => BroughtByErrorKind.invalidCode,
+      'already_customized' => BroughtByErrorKind.alreadyCustomized,
       _ => BroughtByErrorKind.rejected,
     };
 
