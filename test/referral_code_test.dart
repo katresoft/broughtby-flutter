@@ -89,30 +89,53 @@ void main() {
   });
 
   group('extractCodeFromLink', () {
-    test('reads the code from a redirect-shaped link', () {
-      expect(
-        extractCodeFromLink(Uri.parse('https://go.broughtby.io/r/vakitnakit/AHMET34')),
-        'AHMET34',
-      );
+    final Uri share = Uri.parse('https://go.broughtby.io');
+    String? extract(String url) => extractCodeFromLink(Uri.parse(url), shareUrlBase: share);
+
+    test('reads the code from an invite link on the share host', () {
+      expect(extract('https://go.broughtby.io/r/vakitnakit/AHMET34'), 'AHMET34');
+      expect(extract('https://GO.broughtby.io/r/vakitnakit/ahmet34/'), 'AHMET34');
     });
 
-    test('reads the code from a query parameter', () {
-      expect(
-        extractCodeFromLink(Uri.parse('https://app.example.com/invite?code=ahmet34')),
-        'AHMET34',
-      );
+    test('ignores the same path on any other host', () {
+      // Any link can open an app; only ours carries a referral code.
+      expect(extract('https://evil.example/r/vakitnakit/AHMET34'), isNull);
+      expect(extract('http://go.broughtby.io/r/vakitnakit/AHMET34'), isNull);
+      expect(extract('myapp://go.broughtby.io/r/vakitnakit/AHMET34'), isNull);
     });
 
-    test('the query parameter takes priority over the path segment', () {
+    test('never reads a ?code= parameter', () {
+      // That name belongs to OAuth redirects and email verification links:
+      // reading it would send someone else's one-time secret to the server.
+      expect(extract('https://app.example.com/auth/callback?code=483920'), isNull);
+      expect(extract('https://go.broughtby.io/?code=AHMET34'), isNull);
+      expect(extract('https://go.broughtby.io/r/app/PATHCODE?code=QUERYCODE'), 'PATHCODE');
+    });
+
+    test('accepts the invite path and nothing around it', () {
+      expect(extract('https://go.broughtby.io/i/vakitnakit/AHMET34'), isNull);
+      expect(extract('https://go.broughtby.io/x/r/vakitnakit/AHMET34'), isNull);
+      expect(extract('https://go.broughtby.io/r/vakitnakit/AHMET34/extra'), isNull);
+    });
+
+    test('follows a share base that lives under a path', () {
+      final Uri nested = Uri.parse('https://example.com/invite/');
       expect(
-        extractCodeFromLink(Uri.parse('https://go.broughtby.io/r/app/PATHCODE?code=QUERYCODE')),
-        'QUERYCODE',
+        extractCodeFromLink(
+          Uri.parse('https://example.com/invite/r/app/AHMET34'),
+          shareUrlBase: nested,
+        ),
+        'AHMET34',
+      );
+      expect(
+        extractCodeFromLink(Uri.parse('https://example.com/r/app/AHMET34'), shareUrlBase: nested),
+        isNull,
       );
     });
 
     test('returns null for a link with no code', () {
-      expect(extractCodeFromLink(Uri.parse('https://app.example.com/')), isNull);
-      expect(extractCodeFromLink(null), isNull);
+      expect(extract('https://go.broughtby.io/'), isNull);
+      expect(extractCodeFromLink(null, shareUrlBase: share), isNull);
     });
 
     test('does not mistake the app\'s own deep links for a code', () {
@@ -123,13 +146,13 @@ void main() {
         'https://app.example.com/profile/edit',
         'myapp://launch/notifications',
       ]) {
-        expect(extractCodeFromLink(Uri.parse(url)), isNull, reason: url);
+        expect(extract(url), isNull, reason: url);
       }
     });
 
     test('does not crash on missing path segments', () {
-      expect(extractCodeFromLink(Uri.parse('https://go.broughtby.io/r/')), isNull);
-      expect(extractCodeFromLink(Uri.parse('https://go.broughtby.io/r/app')), isNull);
+      expect(extract('https://go.broughtby.io/r/'), isNull);
+      expect(extract('https://go.broughtby.io/r/app'), isNull);
     });
   });
 

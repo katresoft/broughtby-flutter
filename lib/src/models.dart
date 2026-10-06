@@ -88,8 +88,21 @@ enum BroughtByErrorKind {
   /// Network error, or the server couldn't be reached.
   network,
 
-  /// The server rejected the request (invalid key, expired token, malformed
-  /// request).
+  /// The public key or the user's token wasn't accepted. Most often the
+  /// session token has expired: refresh it, call `identify` again, retry.
+  unauthorized,
+
+  /// Too many requests. [BroughtByError.retryAfter] says how long to wait
+  /// when the server gave a figure.
+  rateLimited,
+
+  /// The server failed, or answered with something that wasn't an answer
+  /// (a captive portal's page, say). Nothing is wrong with the request;
+  /// trying again later is the right move.
+  serverError,
+
+  /// The server understood the request and refused it, for a reason that
+  /// has no kind of its own. Retrying the same request won't help.
   rejected,
 
   /// The code isn't valid.
@@ -116,10 +129,27 @@ enum BroughtByErrorKind {
 }
 
 class BroughtByError implements Exception {
-  const BroughtByError(this.kind, [this.detail]);
+  const BroughtByError(this.kind, [this.detail, this.retryAfter]);
 
   final BroughtByErrorKind kind;
   final String? detail;
+
+  /// How long the server asked the caller to wait. Only set for
+  /// [BroughtByErrorKind.rateLimited], and only when the server said.
+  final Duration? retryAfter;
+
+  /// Whether the same request could succeed later without anything about
+  /// it changing: the network came back, the token was refreshed, the
+  /// server recovered.
+  bool get isTransient => switch (kind) {
+        BroughtByErrorKind.network ||
+        BroughtByErrorKind.unauthorized ||
+        BroughtByErrorKind.rateLimited ||
+        BroughtByErrorKind.serverError ||
+        BroughtByErrorKind.notIdentified =>
+          true,
+        _ => false,
+      };
 
   @override
   String toString() => 'BroughtByError(${kind.name}${detail == null ? '' : ': $detail'})';

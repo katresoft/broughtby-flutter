@@ -154,7 +154,59 @@ void main() {
         source: AttributionSource.manualCode,
       );
 
-      expect(result.errorOrNull?.kind, BroughtByErrorKind.rejected);
+      // Not a refusal: a captive portal answers 200 with its own page.
+      expect(result.errorOrNull?.kind, BroughtByErrorKind.serverError);
+      expect(result.errorOrNull?.isTransient, isTrue);
+    });
+
+    test('an expired token, a rate limit and a failing server are told apart', () async {
+      final Map<int, BroughtByErrorKind> cases = <int, BroughtByErrorKind>{
+        401: BroughtByErrorKind.unauthorized,
+        403: BroughtByErrorKind.unauthorized,
+        429: BroughtByErrorKind.rateLimited,
+        500: BroughtByErrorKind.serverError,
+        503: BroughtByErrorKind.serverError,
+        400: BroughtByErrorKind.rejected,
+      };
+
+      for (final MapEntry<int, BroughtByErrorKind> entry in cases.entries) {
+        final BroughtByApiClient client =
+            clientReturning(entry.key, <String, dynamic>{'error': 'something_else'});
+
+        final BroughtByResult<AttributionStatus> result = await client.recordAttribution(
+          code: 'AHMET34',
+          source: AttributionSource.manualCode,
+        );
+
+        expect(result.errorOrNull?.kind, entry.value, reason: '${entry.key}');
+        expect(
+          result.errorOrNull?.isTransient,
+          entry.value != BroughtByErrorKind.rejected,
+          reason: '${entry.key}',
+        );
+      }
+    });
+
+    test('a rate limit carries how long the server asked to wait', () async {
+      final MockClient mock = MockClient((http.Request request) async {
+        return http.Response('{"error":"rate_limited"}', 429, headers: <String, String>{
+          'retry-after': '42',
+        });
+      });
+      final BroughtByApiClient client = BroughtByApiClient(
+        baseUrl: Uri.parse('https://api.example.com'),
+        publicKey: 'bt_pk_test',
+        httpClient: mock,
+      );
+      client.setUserToken('jwt-token');
+
+      final BroughtByResult<AttributionStatus> result = await client.recordAttribution(
+        code: 'AHMET34',
+        source: AttributionSource.manualCode,
+      );
+
+      expect(result.errorOrNull?.kind, BroughtByErrorKind.rateLimited);
+      expect(result.errorOrNull?.retryAfter, const Duration(seconds: 42));
     });
   });
 

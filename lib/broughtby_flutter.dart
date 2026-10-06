@@ -26,6 +26,7 @@ export 'src/models.dart'
         BroughtByResult;
 export 'src/referral_code.dart'
     show
+        defaultShareUrlBase,
         extractCodeFromClipboard,
         extractCodeFromInstallReferrer,
         extractCodeFromLink,

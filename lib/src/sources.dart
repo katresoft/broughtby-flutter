@@ -11,6 +11,15 @@ import 'referral_code.dart';
 /// without touching the others.
 abstract interface class ReferralCodeSource {
   /// The source name — reported to the server as the channel it came from.
+  ///
+  /// The name also decides how often the source is used, so a class of your
+  /// own that wraps a built-in source should report the same name:
+  ///
+  ///   - `clipboard` is read once per install.
+  ///   - `install_referrer` is used once per install: its code belongs to
+  ///     the install, not to whichever account signs in next.
+  ///   - `deep_link` is read on every call; a code it has already delivered
+  ///     is not sent twice.
   String get name;
 
   /// Reads the code. Returns null if this channel isn't available on this
@@ -23,10 +32,16 @@ abstract interface class ReferralCodeSource {
 /// Only works while the app is *already installed*. It returns nothing on
 /// the first launch after install — iOS has no such thing as a deferred
 /// deep link.
+///
+/// Only the link the app was *launched* with is seen here. A link that
+/// arrives while the app is running goes through `BroughtBy.handleLink`.
 class DeepLinkSource implements ReferralCodeSource {
-  DeepLinkSource({AppLinks? appLinks}) : _appLinks = appLinks ?? AppLinks();
+  DeepLinkSource({AppLinks? appLinks, Uri? shareUrlBase})
+      : _appLinks = appLinks ?? AppLinks(),
+        _shareUrlBase = shareUrlBase ?? defaultShareUrlBase;
 
   final AppLinks _appLinks;
+  final Uri _shareUrlBase;
 
   @override
   String get name => 'deep_link';
@@ -35,7 +50,7 @@ class DeepLinkSource implements ReferralCodeSource {
   Future<String?> read() async {
     try {
       final Uri? initial = await _appLinks.getInitialLink();
-      return extractCodeFromLink(initial);
+      return extractCodeFromLink(initial, shareUrlBase: _shareUrlBase);
     } catch (_) {
       return null;
     }

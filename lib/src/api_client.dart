@@ -200,8 +200,11 @@ class BroughtByApiClient {
             jsonDecode(response.body) as Map<String, dynamic>;
         return BroughtByOk<T>(decode(json));
       } catch (error) {
+        // A success status with a body that isn't ours is not the server's
+        // answer — a captive portal does exactly this. Nothing was decided,
+        // so it must not read as a refusal.
         return BroughtByFailure<T>(
-          BroughtByError(BroughtByErrorKind.rejected, 'Could not parse response: $error'),
+          BroughtByError(BroughtByErrorKind.serverError, 'Could not parse response: $error'),
         );
       }
     }
@@ -225,10 +228,25 @@ class BroughtByApiClient {
       'code_taken' => BroughtByErrorKind.codeTaken,
       'invalid_code' => BroughtByErrorKind.invalidCode,
       'already_customized' => BroughtByErrorKind.alreadyCustomized,
-      _ => BroughtByErrorKind.rejected,
+      // No kind of its own: the status code says whether trying again can
+      // help. An expired token and a broken server must not look alike.
+      _ => switch (response.statusCode) {
+          401 || 403 => BroughtByErrorKind.unauthorized,
+          429 => BroughtByErrorKind.rateLimited,
+          >= 500 => BroughtByErrorKind.serverError,
+          _ => BroughtByErrorKind.rejected,
+        },
     };
 
-    return BroughtByError(kind, 'HTTP ${response.statusCode}${code.isEmpty ? '' : ' $code'}');
+    final int? retryAfter = int.tryParse(response.headers['retry-after'] ?? '');
+
+    return BroughtByError(
+      kind,
+      'HTTP ${response.statusCode}${code.isEmpty ? '' : ' $code'}',
+      kind == BroughtByErrorKind.rateLimited && retryAfter != null && retryAfter >= 0
+          ? Duration(seconds: retryAfter)
+          : null,
+    );
   }
 
   void close() {

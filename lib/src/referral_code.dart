@@ -12,8 +12,10 @@ library;
 /// drift apart, Android attribution silently stops working.
 const String referrerCodeKey = 'btb_code';
 
-/// The query parameter the code travels under in a deep link.
-const String deepLinkCodeParam = 'code';
+/// Where share links live unless the app is told otherwise.
+///
+/// Temporary: moves to `go.broughtby.io` once that domain is registered.
+final Uri defaultShareUrlBase = Uri.parse('https://broughtby.vercel.app');
 
 /// Collapses whatever variation the user typed into one canonical code.
 ///
@@ -56,32 +58,40 @@ String? extractCodeFromInstallReferrer(String? referrer) {
 
 /// Extracts the code from a universal / app link.
 ///
-/// Only two shapes are accepted:
+/// Exactly one shape is accepted, and only on the share host:
 ///   `https://go.broughtby.io/r/<slug>/<code>`
-///   `https://app.example.com/invite?code=<code>`
 ///
-/// A heuristic like "treat the last path segment as the code" is
-/// deliberately **absent**: the app's own deep links (`/settings`,
-/// `/profile`) would otherwise be mistaken for a referral code and junk
-/// would be sent to the server on every launch.
-String? extractCodeFromLink(Uri? link) {
+/// Everything else returns null, on purpose:
+///
+///   - **Other hosts.** Any link can open an app. A sign-in redirect, an
+///     email confirmation or a password reset carries its own short-lived
+///     secret, and reading a code out of a link we didn't write would send
+///     that secret to Broughtby — or, if it happened to match a real code,
+///     attribute the user to a stranger.
+///   - **A `?code=` parameter.** That name belongs to OAuth and to most
+///     email verification links. It is never read.
+///   - **"The last path segment is the code".** The app's own deep links
+///     (`/settings`, `/profile`) would be sent to the server as codes.
+String? extractCodeFromLink(Uri? link, {required Uri shareUrlBase}) {
   if (link == null) return null;
+  if (link.scheme != shareUrlBase.scheme) return null;
+  if (link.host.toLowerCase() != shareUrlBase.host.toLowerCase()) return null;
+  if (link.port != shareUrlBase.port) return null;
 
-  final String? queryRaw = link.queryParameters[deepLinkCodeParam];
-  if (queryRaw != null) {
-    final String code = normalizeReferralCode(queryRaw);
-    if (looksLikeReferralCode(code)) return code;
+  final List<String> base = _segments(shareUrlBase);
+  final List<String> segments = _segments(link);
+  if (segments.length != base.length + 3) return null;
+  for (int i = 0; i < base.length; i += 1) {
+    if (segments[i] != base[i]) return null;
   }
+  if (segments[base.length] != 'r') return null;
 
-  final List<String> segments = link.pathSegments;
-  final int marker = segments.indexOf('r');
-  if (marker != -1 && segments.length >= marker + 3) {
-    final String code = normalizeReferralCode(segments[marker + 2]);
-    if (looksLikeReferralCode(code)) return code;
-  }
-
-  return null;
+  final String code = normalizeReferralCode(segments[base.length + 2]);
+  return looksLikeReferralCode(code) ? code : null;
 }
+
+List<String> _segments(Uri uri) =>
+    uri.pathSegments.where((String segment) => segment.isNotEmpty).toList();
 
 /// Treats clipboard content as a possible code.
 ///
